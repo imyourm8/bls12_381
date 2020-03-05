@@ -37,7 +37,7 @@ impl From<u64> for Scalar {
 impl AsRef<[u64]> for Scalar {
     #[inline]
     fn as_ref(&self) -> &[u64] {
-         &self.0
+        &self.0
     }
 }
 
@@ -181,8 +181,8 @@ impl Scalar {
     pub const fn zero() -> Scalar {
         Scalar([0, 0, 0, 0])
     }
-    
-   pub fn shr(&mut self, mut n: u32) {
+    /// Bitwise shift operation
+    pub fn shr(&mut self, mut n: u32) {
         if n >= 256 {
             *self = Self::from(0);
             return;
