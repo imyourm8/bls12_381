@@ -174,6 +174,31 @@ impl Scalar {
     pub const fn zero() -> Scalar {
         Scalar([0, 0, 0, 0])
     }
+    
+   pub fn shr(&mut self, mut n: u32) {
+        if n >= 256 {
+            *self = Self::from(0);
+            return;
+        }
+
+        while n >= 64 {
+            let mut t = 0;
+            for i in self.0.iter_mut().rev() {
+                core::mem::swap(&mut t, i);
+            }
+            n -= 64;
+        }
+
+        if n > 0 {
+            let mut t = 0;
+            for i in self.0.iter_mut().rev() {
+                let t2 = *i << (64 - n);
+                *i >>= n;
+                *i |= t;
+                t = t2;
+            }
+        }
+    }
 
     /// Returns one, the multiplicative identity.
     #[inline]
