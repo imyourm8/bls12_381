@@ -34,6 +34,13 @@ impl From<u64> for Scalar {
     }
 }
 
+impl AsRef<[u64]> for Scalar {
+    #[inline]
+    fn as_ref(&self) -> &[u64] {
+         &self.0
+    }
+}
+
 impl ConstantTimeEq for Scalar {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.0[0].ct_eq(&other.0[0])
