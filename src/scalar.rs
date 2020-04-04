@@ -3,6 +3,8 @@
 
 use core::convert::TryFrom;
 use core::fmt;
+use core::cmp::Ordering;
+
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Shr, Sub, SubAssign};
 
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
@@ -28,6 +30,24 @@ impl fmt::Debug for Scalar {
     }
 }
 
+impl From<i8> for Scalar {
+    /// Performs the conversion. 
+    fn from(_inp: i8) -> Scalar {
+        let mut res = Scalar::zero();
+
+        match _inp >= 0 {
+            true => {
+                res.0[0] = _inp as u64;
+                return res
+            },
+            false => {
+                res.0[0] = _inp.abs() as u64;
+                return -res
+            }
+        }
+    }
+}
+
 impl From<u64> for Scalar {
     fn from(val: u64) -> Scalar {
         Scalar([val, 0, 0, 0]) * R2
@@ -47,6 +67,25 @@ impl PartialEq for Scalar {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).unwrap_u8() == 1
+    }
+}
+
+impl PartialOrd for Scalar {
+    fn partial_cmp(&self, other: &Scalar) -> Option<Ordering> {
+        Some(self.cmp(&other))
+    }
+}
+
+impl Ord for Scalar {
+    fn cmp(&self, other: &Self) -> Ordering {
+        for i in (0..4).rev() {
+            if self.0[i] > other.0[i] {
+                return Ordering::Greater;
+            } else if self.0[i] < other.0[i] {
+                return Ordering::Less;
+            }
+        }
+        Ordering::Equal
     }
 }
 
@@ -631,7 +670,7 @@ impl Scalar {
     #[inline]
     pub fn divn(&mut self, mut n: u32) {
         if n >= 256 {
-            *self = Self::from(0);
+            *self = Self::from(0u64);
             return;
         }
 
@@ -652,6 +691,38 @@ impl Scalar {
                 t = t2;
             }
         }
+    }
+
+    /// Computes the Non-Adjacent Form of the given Scalar.
+    pub fn compute_NAF(&self) -> [i8; 256] {
+        let mut k = *self;
+        let mut i = 0;
+        let one = Scalar::one();
+        let mut res = [0i8; 256];
+
+        while k >= one {
+            if (k.0[0] & 1) != 0 {
+                let ki = 2i8 - k.mod_2_pow_k(2u8) as i8;
+                res[i] = ki;
+                k = k - Scalar::from(ki);
+            } else {
+                res[i] = 0i8;
+            };
+
+            k.divn(1u32);
+            i +=1;
+        }
+        res
+    }
+
+    /// Compute the result from `Scalar (mod 2^k)`.
+    /// 
+    /// # Panics
+    /// 
+    /// If the given k is > 32 (5 bits) as the value gets 
+    /// greater than the limb.  
+    fn mod_2_pow_k(&self, k: u8) -> u8 {
+        (self.0[0] & ((1 << k) -1)) as u8
     }
 }
 

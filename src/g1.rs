@@ -728,7 +728,7 @@ impl G1Projective {
     }
 
     fn multiply(&self, by: &[u8; 32]) -> G1Projective {
-        let mut acc = G1Projective::identity();
+        /*let mut acc = G1Projective::identity();
 
         // This is a simple double-and-add implementation of point
         // multiplication, moving from most significant to least
@@ -746,7 +746,25 @@ impl G1Projective {
             acc = G1Projective::conditional_select(&acc, &(acc + self), bit);
         }
 
-        acc
+        acc*/
+
+        self.binary_naf_mul(&Scalar::from_bytes(by).unwrap().reduce())
+    }
+
+    /// Performs binary-NAF Scalar multiplication.
+    pub fn binary_naf_mul(&self, scalar: &Scalar) -> Self {
+        let mut Q = Self::identity();
+        let k_naf = scalar.compute_NAF();
+
+        for i in (0..255).rev() {
+            Q = Q.double();
+            match k_naf[i] as i16 {
+                1i16 => Q = Q + self,
+                -1_i16 => Q = Q - self,
+                _ => (),
+            };
+        }
+        Q
     }
 
     /// Multiply `self` by `crate::BLS_X`, using double and add.
@@ -1357,7 +1375,7 @@ fn test_mul_by_x() {
     };
     assert_eq!(generator.mul_by_x(), generator * x);
 
-    let point = G1Projective::generator() * Scalar::from(42);
+    let point = G1Projective::generator() * Scalar::from(42u64);
     assert_eq!(point.mul_by_x(), point * x);
 }
 
@@ -1405,7 +1423,7 @@ fn test_clear_cofactor() {
 
     // in BLS12-381 the cofactor in G1 can be
     // cleared multiplying by (1-x)
-    let h_eff = Scalar::from(1) + Scalar::from(crate::BLS_X);
+    let h_eff = Scalar::one() + Scalar::from(crate::BLS_X);
     assert_eq!(point.clear_cofactor(), point * h_eff);
 }
 
