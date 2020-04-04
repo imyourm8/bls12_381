@@ -4,6 +4,17 @@ use crate::{
     scalar::Scalar,
 };
 use byteorder;
+use rayon::prelude::*;
+
+/// Performs the naive MSM
+pub fn naive_msm(points: &Vec<G1Projective>, scalars: &Vec<Scalar>) -> G1Projective
+{
+    scalars
+            .par_iter()
+            .zip(points.par_iter())
+            .map(|(sc, pt)| pt * sc)
+            .sum::<G1Projective>()
+}
 
 #[cfg(feature = "std")]
 /// Performs multiscalar multiplication reliying on Pippenger's algorithm.
@@ -195,7 +206,7 @@ pub fn msm_variable_base(points: &[G1Affine], scalars: &[Scalar]) -> G1Projectiv
     let zero = G1Projective::identity();
     let window_starts: Vec<_> = (0..num_bits).step_by(c).collect();
 
-    let window_starts_iter = window_starts.into_par_iter();
+    let window_starts_iter = window_starts.par_iter();
 
     // Each window is of size `c`.
     // We divide up the bits 0..num_bits into windows of size `c`, and
@@ -212,7 +223,7 @@ pub fn msm_variable_base(points: &[G1Affine], scalars: &[Scalar]) -> G1Projectiv
                 .for_each(|(&scalar, base)| {
                     if scalar == fr_one {
                         // We only process unit scalars once in the first window.
-                        if w_start == 0 {
+                        if w_start == &0usize {
                             res = res.add_mixed(base);
                         }
                     } else {
@@ -220,7 +231,7 @@ pub fn msm_variable_base(points: &[G1Affine], scalars: &[Scalar]) -> G1Projectiv
 
                         // We right-shift by w_start, thus getting rid of the
                         // lower bits.
-                        scalar.divn(w_start as u32);
+                        scalar.divn(*w_start as u32);
 
                         // We mod the remaining bits by the window size.
                         let scalar = scalar.0[0] % (1 << c);
@@ -236,8 +247,8 @@ pub fn msm_variable_base(points: &[G1Affine], scalars: &[Scalar]) -> G1Projectiv
                 });
 
             let mut running_sum = G1Projective::identity();
-            for b in buckets.into_iter().rev() {
-                running_sum = running_sum + b;
+            for b in buckets.iter().rev() {
+                running_sum += b;
                 res += &running_sum;
             }
 
@@ -273,6 +284,8 @@ fn log2(x: usize) -> u32 {
     let n = x.leading_zeros();
     core::mem::size_of::<usize>() as u32 * 8 - n
 }
+
+
 
 mod tests {
     use super::*;
