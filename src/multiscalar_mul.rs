@@ -178,6 +178,100 @@ fn to_radix_2w(scalar: &Scalar, w: usize) -> [i8; 43] {
 }
 
 /// Performs a Variable Base Multiscalar Multiplication.
+pub fn msm_variable_base_fast(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
+    use rayon::prelude::*;
+
+    let c = if scalars.len() < 32 {
+        3
+    } else {
+        ln_without_floats(scalars.len()) + 2
+    };
+
+    let num_bits = 255usize;
+    let fr_one = Scalar::one();
+
+    let zero = G1Projective::identity();
+    let window_starts: Vec<_> = (0..num_bits).step_by(c).collect();
+
+    let window_starts_iter = window_starts.into_par_iter();
+
+    let reduced_scalars: Vec<Scalar> = scalars
+        .iter()
+        .filter(|s| !(*s == &Scalar::zero()))
+        .map(|&scalar| {
+            if scalar != fr_one {
+                scalar.reduce();
+            }
+
+            scalar
+        })
+        .collect();
+
+    // Each window is of size `c`.
+    // We divide up the bits 0..num_bits into windows of size `c`, and
+    // in parallel process each such window.
+    let window_sums: Vec<_> = window_starts_iter
+        .map(|w_start| {
+            let mut res = zero;
+            // We don't need the "zero" bucket, so we only have 2^c - 1 buckets
+            let mut buckets = vec![zero; (1 << c) - 1];
+            reduced_scalars
+                .iter()
+                .zip(points)
+                .for_each(|(&scalar, base)| {
+                    if scalar == fr_one {
+                        // We only process unit scalars once in the first window.
+                        if w_start == 0 {
+                            res = res.add_mixed(base);
+                        }
+                    } else {
+                        let mut scalar = scalar;
+
+                        // We right-shift by w_start, thus getting rid of the
+                        // lower bits.
+                        scalar.divn(w_start as u32);
+
+                        // We mod the remaining bits by the window size.
+                        let scalar = scalar.0[0] % (1 << c);
+
+                        // If the scalar is non-zero, we update the corresponding
+                        // bucket.
+                        // (Recall that `buckets` doesn't have a zero bucket.)
+                        if scalar != 0 {
+                            buckets[(scalar - 1) as usize] =
+                                buckets[(scalar - 1) as usize].add_mixed(base);
+                        }
+                    }
+                });
+
+            let mut running_sum = G1Projective::identity();
+            for b in buckets.iter().rev() {
+                running_sum = running_sum.add(b);
+
+                res = res.add(&running_sum);
+            }
+
+            res
+        })
+        .collect();
+
+    // We store the sum for the lowest window.
+    let lowest = *window_sums.first().unwrap();
+    // We're traversing windows from high to low.
+    window_sums[1..]
+        .iter()
+        .rev()
+        .fold(zero, |mut total, sum_i| {
+            total += sum_i;
+            for _ in 0..c {
+                total = total.double();
+            }
+            total
+        })
+        + lowest
+}
+
+/// Performs a Variable Base Multiscalar Multiplication.
 pub fn msm_variable_base(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
     use rayon::prelude::*;
 
@@ -186,6 +280,7 @@ pub fn msm_variable_base(points: &[G1Affine], scalars: &[Scalar]) -> G1Projectiv
     } else {
         ln_without_floats(scalars.len()) + 2
     };
+
 
     let num_bits = 255usize;
     let fr_one = Scalar::one();
@@ -216,16 +311,16 @@ pub fn msm_variable_base(points: &[G1Affine], scalars: &[Scalar]) -> G1Projectiv
                     } else {
                         let mut scalar = scalar.reduce();
 
-                        // We right-shift by w_start, thus getting rid of the
-                        // lower bits.
+                        We right-shift by w_start, thus getting rid of the
+                        lower bits.
                         scalar.divn(w_start as u32);
 
-                        // We mod the remaining bits by the window size.
+                        We mod the remaining bits by the window size.
                         let scalar = scalar.0[0] % (1 << c);
 
-                        // If the scalar is non-zero, we update the corresponding
-                        // bucket.
-                        // (Recall that `buckets` doesn't have a zero bucket.)
+                        If the scalar is non-zero, we update the corresponding
+                        bucket.
+                        (Recall that `buckets` doesn't have a zero bucket.)
                         if scalar != 0 {
                             buckets[(scalar - 1) as usize] =
                                 buckets[(scalar - 1) as usize].add_mixed(base);
@@ -233,12 +328,16 @@ pub fn msm_variable_base(points: &[G1Affine], scalars: &[Scalar]) -> G1Projectiv
                     }
                 });
 
+            let start = std::time::Instant::now();
             let mut running_sum = G1Projective::identity();
-            for b in buckets.into_iter().rev() {
-                running_sum = running_sum + b;
-                res += &running_sum;
-            }
+            for b in buckets.iter().rev() {
+                if *b != zero {
+                    running_sum = running_sum.add(b);
+                }
 
+                res = res.add(&running_sum);
+            }
+            
             res
         })
         .collect();
