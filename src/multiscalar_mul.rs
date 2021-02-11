@@ -281,6 +281,13 @@ pub fn msm_variable_base(points: &[G1Affine], scalars: &[Scalar]) -> G1Projectiv
         ln_without_floats(scalars.len()) + 2
     };
 
+    // log::info!(
+    //     target: "system",
+    //     "[msm_variable_base] c {:#?} || scalars.len() {:#?} || points.len() {:#?}",
+    //     c,
+    //     scalars.len(),
+    //     points.len()
+    // );
 
     let num_bits = 255usize;
     let fr_one = Scalar::one();
@@ -311,16 +318,16 @@ pub fn msm_variable_base(points: &[G1Affine], scalars: &[Scalar]) -> G1Projectiv
                     } else {
                         let mut scalar = scalar.reduce();
 
-                        We right-shift by w_start, thus getting rid of the
-                        lower bits.
+                        // We right-shift by w_start, thus getting rid of the
+                        // lower bits.
                         scalar.divn(w_start as u32);
 
-                        We mod the remaining bits by the window size.
+                        // We mod the remaining bits by the window size.
                         let scalar = scalar.0[0] % (1 << c);
 
-                        If the scalar is non-zero, we update the corresponding
-                        bucket.
-                        (Recall that `buckets` doesn't have a zero bucket.)
+                        // If the scalar is non-zero, we update the corresponding
+                        // bucket.
+                        // (Recall that `buckets` doesn't have a zero bucket.)
                         if scalar != 0 {
                             buckets[(scalar - 1) as usize] =
                                 buckets[(scalar - 1) as usize].add_mixed(base);
