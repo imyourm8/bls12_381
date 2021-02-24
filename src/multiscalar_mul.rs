@@ -189,6 +189,7 @@ pub fn msm_variable_base_fast(points: &[G1Affine], scalars: &[Scalar]) -> G1Proj
 
     let num_bits = 255usize;
     let fr_one = Scalar::one();
+    let fr_zero = Scalar::zero();
 
     let zero = G1Projective::identity();
     let window_starts: Vec<_> = (0..num_bits).step_by(c).collect();
@@ -197,13 +198,16 @@ pub fn msm_variable_base_fast(points: &[G1Affine], scalars: &[Scalar]) -> G1Proj
 
     let reduced_scalars: Vec<Scalar> = scalars
         .iter()
-        .filter(|s| !(*s == &Scalar::zero()))
         .map(|&scalar| {
-            if scalar != fr_one {
-                scalar.reduce();
+            if scalar == fr_zero {
+                return scalar;
             }
 
-            scalar
+            if scalar != fr_one {
+                return scalar.reduce();
+            }
+
+            return scalar;
         })
         .collect();
 
