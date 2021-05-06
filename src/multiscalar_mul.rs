@@ -222,6 +222,7 @@ pub fn msm_variable_base_fast(points: &[G1Affine], scalars: &[Scalar]) -> G1Proj
             reduced_scalars
                 .iter()
                 .zip(points)
+                .filter(|(s, _)| !(*s == &Scalar::zero()))
                 .for_each(|(&scalar, base)| {
                     if scalar == fr_one {
                         // We only process unit scalars once in the first window.
